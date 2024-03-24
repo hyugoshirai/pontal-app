@@ -85,7 +85,7 @@ server <- function(input, output, session) {
   })
 }
 
-app_url <- shinyAppDir("app")
+app_url <- shinyAppDir("app") 
 
 shinyApp(ui = ui, server = server)
 
