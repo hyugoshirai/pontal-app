@@ -18,7 +18,6 @@ ui <- fluidPage(
 
 
 server <- function(input, output, session) {
-  options(shiny.launch.browser = .rs.invokeShinyWindowExternal)
   # Initialize reactive values to store drawn polygons
   drawn_polygons <- reactiveValues(polygons = list())
   label_text <- reactiveVal(NULL)
@@ -85,8 +84,6 @@ server <- function(input, output, session) {
       )
   })
 }
-
-app_url <- shinyAppDir("app") 
 
 shinyApp(ui = ui, server = server)
 
