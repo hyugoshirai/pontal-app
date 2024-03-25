@@ -45,7 +45,7 @@ server <- function(input, output, session) {
   output$map <- renderLeaflet({
     leaflet() %>%
       addProviderTiles(providers$OpenStreetMap) %>%
-      setView(lng = -52.320349, lat = -22.513868, zoom = 12) %>%
+      setView(lng = -52.320349, lat = -22.513868, zoom = 9) %>%
       addScaleBar() %>%
       addDrawToolbar(polylineOptions = FALSE,
                      polygonOptions = drawPolygonOptions(),
