@@ -1,3 +1,4 @@
+# load packages
 library(shiny)
 library(leaflet)
 library(raster)
@@ -6,6 +7,9 @@ library(shinyWidgets)
 library(sf)
 library(raster)
 library(rgdal)
+library(tidyverse)
+library(shinyjs)
+library(googledrive)
 
 # Define UI for application that draws a map
 ui <- fluidPage(
@@ -50,14 +54,21 @@ server <- function(input, output, session) {
       addProviderTiles(provider = input$basemap) %>%
       setView(lng = -52.320349, lat = -22.513868, zoom = 9) %>%
       addScaleBar() %>%
-      addDrawToolbar(polylineOptions = FALSE,
-                     polygonOptions = drawPolygonOptions(),
-                     circleOptions = FALSE,
-                     rectangleOptions = FALSE,
-                     markerOptions = FALSE,
-                     circleMarkerOptions = FALSE, 
-                     editOptions = FALSE,
-                     singleFeature = FALSE)
+     addDrawToolbar(
+      polylineOptions = FALSE,
+      polygonOptions = drawPolygonOptions(
+        showArea = FALSE, 
+        metric = TRUE,
+        shapeOptions = drawShapeOptions(clickable = TRUE), 
+        repeatMode = FALSE
+      ),
+      circleOptions = FALSE,
+      rectangleOptions = FALSE,
+      markerOptions = FALSE,
+      circleMarkerOptions = FALSE, 
+      singleFeature = FALSE,
+      editOptions = editToolbarOptions()
+    )
   })
   
   # Dynamically render text input for marker label
@@ -73,10 +84,12 @@ server <- function(input, output, session) {
     output$label_input <- renderUI({
       fluidRow(
         textInput("label_text_input", "Enter label text:", ""),
-        actionButton("add_label_button", "Add Label")
+        actionButton("add_label_button", "Add Label"),
+        actionButton("UpldButton", "Upload")
       )
     })
   })
+  
   
   observeEvent(input$add_label_button, {
     # Get the last drawn polygon
@@ -104,7 +117,72 @@ server <- function(input, output, session) {
                                              )
                  )
       )
-  })
+
+    # Define a reactive value to keep track of button clicks
+    clickCount <- reactiveVal(0)
+
+    # Observe the button click event
+    observeEvent(input$UpldButton, {
+      # Increment the click count
+      clickCount(clickCount() + 1)
+      print(clickCount)
+      
+      # Call your custom function or code here
+      customFunction(clickCount())
+    })
+    
+    # Define the custom function to be executed on button click
+    customFunction <- function(clickCount) {
+      # Get the features drawn on the map
+      polygon_coordinates <- input$map_draw_new_feature$geometry$coordinates[[1]]
+      # Perform your desired actions here
+      print("funciona")
+      temp_shp <- tempdir()
+      lng <- map_dbl(polygon_coordinates, `[[`, 1)
+      lat <- map_dbl(polygon_coordinates, `[[`, 2)
+      print(lng)
+      print(lat)
+      
+      
+      shapefileName <- input$label_text_input  # Extract shapefile name from input
+      shp <- st_as_sf(tibble(lon = lng, lat = lat),
+                      coords = c("lon", "lat"),
+                      crs = 4326) %>%
+        summarise(geometry = st_combine(geometry)) %>%
+        st_cast("POLYGON")
+      
+      # Write the shapefile components into the specified folder with an explicit driver
+      st_write(shp, file.path(temp_shp, paste0(shapefileName, ".shp")), driver = "ESRI Shapefile", append=TRUE)
+      st_write(shp, file.path(temp_shp, paste0(shapefileName, ".shx")), driver = "ESRI Shapefile", append=TRUE)
+      st_write(shp, file.path(temp_shp, paste0(shapefileName, ".dbf")), driver = "ESRI Shapefile", append=TRUE)
+      
+      # Manually create and save the .prj file
+      prj_content <- 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]'
+      writeLines(prj_content, file.path(temp_shp, paste0(shapefileName, ".prj")))
+      
+      # Authenticate with Google Drive using OAuth
+      drive_auth()
+      td <- drive_get("https://drive.google.com/drive/folders/15d_6NxHaXK2qzBzyI9SJcOQYJFMQA_Fn")
+      
+      # Upload the zipped file to Google Drive
+      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".shp")),
+                name = paste0(shapefileName, ".shp"),
+                path = as_id(td))
+      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".shx")),
+                name = paste0(shapefileName, ".shx"),
+                path = as_id(td))
+      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".dbf")),
+                name = paste0(shapefileName, ".dbf"),
+                path = as_id(td))
+      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".prj")),
+                name = paste0(shapefileName, ".prj"),
+                path = as_id(td))
+
+      # Render a text output to indicate completion
+      renderText(paste("Done! Shapefile named:", shapefileName))
+    }
+    })
+ 
 }
 
 shinyApp(ui = ui, server = server)
