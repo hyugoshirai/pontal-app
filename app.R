@@ -20,7 +20,10 @@ ui <- fluidPage(
         tags$hr(),  # Add a horizontal line
         p("Finish the polygon and enter the label in the text box."),
         tags$hr(),  # Add a horizontal line
-        p("After finishing the text, click Ádd Label' button to add it to the centroid of the polygon")
+        p("After finishing the text, click Ádd Label' button to add it to the centroid of the polygon"),
+        selectInput("basemap", "Select Basemap:", 
+                    choices = c("OpenStreetMap", "Esri.WorldImagery"),
+                    selected = "OpenStreetMap")
       ),
     mainPanel(
       leafletOutput("map"),
@@ -44,7 +47,7 @@ server <- function(input, output, session) {
   # Render leaflet map
   output$map <- renderLeaflet({
     leaflet() %>%
-      addProviderTiles(providers$OpenStreetMap) %>%
+      addProviderTiles(provider = input$basemap) %>%
       setView(lng = -52.320349, lat = -22.513868, zoom = 9) %>%
       addScaleBar() %>%
       addDrawToolbar(polylineOptions = FALSE,
@@ -104,5 +107,5 @@ server <- function(input, output, session) {
   })
 }
 
-shinyApp(ui = ui, server = server)
+# shinyApp(ui = ui, server = server)
 
