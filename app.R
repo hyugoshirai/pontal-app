@@ -47,11 +47,7 @@ server <- function(input, output, session) {
   # Render leaflet map
   output$map <- renderLeaflet({
     leaflet() %>%
-<<<<<<< HEAD
       addProviderTiles(provider = input$basemap) %>%
-=======
-      addProviderTiles(providers$OpenStreetMap) %>%
->>>>>>> 762c449b0d76e32ebb27497ef80931919a206c1e
       setView(lng = -52.320349, lat = -22.513868, zoom = 9) %>%
       addScaleBar() %>%
       addDrawToolbar(polylineOptions = FALSE,
@@ -111,5 +107,5 @@ server <- function(input, output, session) {
   })
 }
 
-# shinyApp(ui = ui, server = server)
+shinyApp(ui = ui, server = server)
 
