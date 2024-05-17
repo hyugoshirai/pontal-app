@@ -37,7 +37,9 @@ ui <- fluidPage(
         tags$hr(),  # Add a horizontal line
         p("After finishing the text, click 'Ádd Label' button to add it to the centroid of the polygon"),
         tags$hr(),  # Add a horizontal line
-        p("Finally, click the 'Upload' button"),
+        p("Then, click the 'Upload' button"),
+        tags$hr(),  # Add a horizontal line
+        p("Finally, follow the instructions on the Console menu"),
         selectInput("basemap", "Select Basemap:", 
                     choices = c("OpenStreetMap", "Esri.WorldImagery"),
                     selected = "OpenStreetMap")
