@@ -4,11 +4,12 @@ packages <- c(
   "leaflet",
   "leaflet.extras",
   "raster",
-  "rgdal",
+  # "rgdal",
   "sf",
   "shiny",
   "shinyWidgets",
   "shinyjs",
+  "terra",
   "tidyverse"
 )
 
