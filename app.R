@@ -21,32 +21,30 @@ if (length(install_packages) > 0) {
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))
 
-
 # Define UI for application that draws a map
 ui <- fluidPage(
   titlePanel("Mapping the Pontal"),
   sidebarLayout(
-      sidebarPanel(
-        # Add text to the sidebar
-        HTML("<h3> Draw Polygons and Add Labels </h3>"),
-        p("This tool is designed to draw polygon into the map and adding labels to them."),
-        tags$hr(),  # Add a horizontal line
-        p("With the 'Draw a polygon' tool, add polygons to the map."),
-        tags$hr(),  # Add a horizontal line
-        p("Finish the polygon and enter the label in the text box."),
-        tags$hr(),  # Add a horizontal line
-        p("After finishing the text, click 'Ádd Label' button to add it to the centroid of the polygon"),
-        tags$hr(),  # Add a horizontal line
-        p("Then, click the 'Upload' button"),
-        tags$hr(),  # Add a horizontal line
-        p("Finally, follow the instructions on the Console menu"),
-        selectInput("basemap", "Select Basemap:", 
-                    choices = c("OpenStreetMap", "Esri.WorldImagery"),
-                    selected = "OpenStreetMap")
-      ),
+    sidebarPanel(
+      HTML("<h3> Draw Polygons and Add Labels </h3>"),
+      p("This tool is designed to draw polygons on the map and add labels to them."),
+      tags$hr(),
+      p("With the 'Draw a polygon' tool, add polygons to the map."),
+      tags$hr(),
+      p("Finish the polygon and enter the label in the text box."),
+      tags$hr(),
+      p("After finishing the text, click 'Add Label' button to add it to the centroid of the polygon."),
+      tags$hr(),
+      p("Then, click the 'Upload' button."),
+      tags$hr(),
+      p("Finally, follow the instructions on the Console menu."),
+      selectInput("basemap", "Select Basemap:", 
+                  choices = c("OpenStreetMap", "Esri.WorldImagery"),
+                  selected = "OpenStreetMap")
+    ),
     mainPanel(
       leafletOutput("map"),
-      uiOutput("label_input")  # Add this line to include the dynamic UI element
+      uiOutput("label_input")
     )
   )
 )
@@ -54,14 +52,9 @@ ui <- fluidPage(
 # Define server logic
 server <- function(input, output, session) {
   
-  # Render instructions text
-  output$instructions <- renderText({
-    "Insert your instructions here..."
-  })
-  
-  # Initialize reactive values to store drawn polygons
+  # Initialize reactive values to store drawn and edited polygons
   drawn_polygons <- reactiveValues(polygons = list())
-  label_text <- reactiveVal(NULL)
+  edited_polygon <- reactiveValues(polygons = list())
   
   # Render leaflet map
   output$map <- renderLeaflet({
@@ -69,59 +62,84 @@ server <- function(input, output, session) {
       addProviderTiles(provider = input$basemap) %>%
       setView(lng = -52.320349, lat = -22.513868, zoom = 9) %>%
       addScaleBar() %>%
-     addDrawToolbar(
-      polylineOptions = FALSE,
-      polygonOptions = drawPolygonOptions(showArea = TRUE, 
-                                          metric = TRUE,
-                                          shapeOptions = drawShapeOptions(clickable = TRUE), 
-                                          repeatMode = FALSE),
-      circleOptions = FALSE,
-      rectangleOptions = drawRectangleOptions(showArea = TRUE, 
-                                              metric = TRUE,
-                                              shapeOptions = drawShapeOptions(clickable = TRUE), 
-                                              repeatMode = FALSE),
-      markerOptions = FALSE,
-      circleMarkerOptions = FALSE, 
-      singleFeature = FALSE,
-      editOptions = editToolbarOptions()
+      addDrawToolbar(
+        polylineOptions = FALSE,
+        polygonOptions = drawPolygonOptions(showArea = TRUE, 
+                                            metric = TRUE,
+                                            shapeOptions = drawShapeOptions(clickable = TRUE), 
+                                            repeatMode = FALSE),
+        circleOptions = FALSE,
+        rectangleOptions = drawRectangleOptions(showArea = TRUE, 
+                                                metric = TRUE,
+                                                shapeOptions = drawShapeOptions(clickable = TRUE), 
+                                                repeatMode = FALSE),
+        markerOptions = FALSE,
+        circleMarkerOptions = FALSE, 
+        singleFeature = FALSE,
+        editOptions = editToolbarOptions()
+      )
+  })
+  
+  # Dynamically render text input for marker label and add label button
+  output$label_input <- renderUI({
+    fluidRow(
+      textInput("label_text_input", "Enter label text:", ""),
+      actionButton("add_label_button", "Add Label"),
+      actionButton("UpldButton", "Upload")
     )
   })
   
-  # Dynamically render text input for marker label
-  observeEvent(input$map_draw_new_feature, {
-    # Get the features drawn on the map
-    polygon_coordinates <- input$map_draw_new_feature$geometry$coordinates[[1]]
-    
-    # Transform coordinates to an sp Polygon
-    drawn_polygon <- Polygon(do.call(rbind, lapply(polygon_coordinates, function(x) c(x[[1]][1], x[[2]][1]))))
-    drawn_polygons$polygons <- c(drawn_polygons$polygons, list(drawn_polygon))
-    
-    # Create UI for label input and add label button dynamically
-    output$label_input <- renderUI({
-      fluidRow(
-        textInput("label_text_input", "Enter label text:", ""),
-        actionButton("add_label_button", "Add Label"),
-        actionButton("UpldButton", "Upload")
-      )
-    })
+  # Function to add polygons to the map
+  addPolygonsToMap <- function(map, polygons) {
+    for (polygon in polygons) {
+      coords <- st_coordinates(polygon)[, 1:2]
+      leafletProxy(map) %>%
+        addPolygons(lng = coords[, 1], lat = coords[, 2], color = "blue", weight = 2, fill = TRUE)
+    }
+  }
+  
+  # Observe basemap change and re-render polygons
+  observeEvent(input$basemap, {
+    leafletProxy("map") %>%
+      clearTiles() %>%
+      addProviderTiles(provider = input$basemap)
+    addPolygonsToMap("map", drawn_polygons$polygons)
   })
   
+  # Handle polygon drawing
+  observeEvent(input$map_draw_new_feature, {
+    polygon_coordinates <- input$map_draw_new_feature$geometry$coordinates[[1]]
+    new_polygon <- st_polygon(list(do.call(rbind, lapply(polygon_coordinates, function(x) c(x[[1]], x[[2]])))))
+    drawn_polygons$polygons <- append(drawn_polygons$polygons, list(new_polygon))
+    edited_polygon$polygons <- list()  # Reset edited polygon
+    addPolygonsToMap("map", list(new_polygon))  # Add the new polygon to the map
+  })
   
+  # Handle polygon editing
+  observeEvent(input$map_draw_edited_features, {
+    edited_polygon_coords <- input$map_draw_edited_features$features[[1]]$geometry$coordinates[[1]]
+    edited_polygon_sf <- st_polygon(list(do.call(rbind, lapply(edited_polygon_coords, function(x) c(x[[1]], x[[2]])))))
+    edited_polygon$polygons <- list(edited_polygon_sf)
+    addPolygonsToMap("map", list(edited_polygon_sf))  # Add the edited polygon to the map
+  })
+  
+  # Handle adding label to the last drawn or edited polygon
   observeEvent(input$add_label_button, {
-    # Get the last drawn polygon
-    last_polygon <- drawn_polygons$polygons[[length(drawn_polygons$polygons)]]
-    
-    # Calculate centroid of the last drawn polygon
-    centroid <- colMeans(coordinates(last_polygon))
-    print(centroid)
-    
-    # Get the content for the marker label from the text input
     label_text_input <- input$label_text_input
+    if (length(edited_polygon$polygons) > 0) {
+      last_polygon <- edited_polygon$polygons[[1]]
+    } else if (length(drawn_polygons$polygons) > 0) {
+      last_polygon <- drawn_polygons$polygons[[length(drawn_polygons$polygons)]]
+    } else {
+      return()  # Return if there are no drawn or edited polygons
+    }
     
-    # Add marker at the centroid of the last drawn polygon
+    centroid <- st_centroid(st_sfc(last_polygon))
+    centroid_coords <- st_coordinates(centroid)
+    
     leafletProxy("map") %>%
-      addMarkers(lng = centroid[1], lat = centroid[2],
-                 label = label_text_input, # Use the text input as label content
+      addMarkers(lng = centroid_coords[1], lat = centroid_coords[2],
+                 label = label_text_input,
                  labelOptions = labelOptions(noHide = TRUE, direction = "bottom",
                                              style = list(
                                                color = "red",
@@ -133,73 +151,46 @@ server <- function(input, output, session) {
                                              )
                  )
       )
-
-    # Define a reactive value to keep track of button clicks
-    clickCount <- reactiveVal(0)
-
-    # Observe the button click event
-    observeEvent(input$UpldButton, {
-      # Increment the click count
-      clickCount(clickCount() + 1)
-      print(clickCount)
-      
-      # Call your custom function or code here
-      customFunction(clickCount())
-    })
+  })
+  
+  # Handle uploading the last drawn or edited polygon
+  observeEvent(input$UpldButton, {
+    if (length(edited_polygon$polygons) > 0) {
+      shp <- edited_polygon$polygons[[1]]
+    } else if (length(drawn_polygons$polygons) > 0) {
+      shp <- drawn_polygons$polygons[[length(drawn_polygons$polygons)]]
+    } else {
+      return()  # Return if there are no drawn or edited polygons
+    }
     
-    # Define the custom function to be executed on button click
-    customFunction <- function(clickCount) {
-      # Get the features drawn on the map
-      polygon_coordinates <- input$map_draw_new_feature$geometry$coordinates[[1]]
-      # Perform your desired actions here
-      print("funciona")
-      temp_shp <- tempdir()
-      lng <- map_dbl(polygon_coordinates, `[[`, 1)
-      lat <- map_dbl(polygon_coordinates, `[[`, 2)
-      print(lng)
-      print(lat)
-      
-      
-      shapefileName <- input$label_text_input  # Extract shapefile name from input
-      shp <- st_as_sf(tibble(lon = lng, lat = lat),
-                      coords = c("lon", "lat"),
-                      crs = 4326) %>%
-        summarise(geometry = st_combine(geometry)) %>%
-        st_cast("POLYGON")
-      
-      # Write the shapefile components into the specified folder with an explicit driver
-      st_write(shp, file.path(temp_shp, paste0(shapefileName, ".shp")), driver = "ESRI Shapefile", append=TRUE)
-      st_write(shp, file.path(temp_shp, paste0(shapefileName, ".shx")), driver = "ESRI Shapefile", append=TRUE)
-      st_write(shp, file.path(temp_shp, paste0(shapefileName, ".dbf")), driver = "ESRI Shapefile", append=TRUE)
-      
-      # Manually create and save the .prj file
+    # Convert to sf object
+    shp_sf <- st_sfc(shp, crs = 4326) %>% st_sf()
+    
+    shapefileName <- input$label_text_input
+    temp_shp <- tempdir()
+    
+    # Write shapefile
+    tryCatch({
+      st_write(shp_sf, file.path(temp_shp, paste0(shapefileName, ".shp")), delete_dsn = TRUE)
       prj_content <- 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]'
       writeLines(prj_content, file.path(temp_shp, paste0(shapefileName, ".prj")))
       
-      # Authenticate with Google Drive using OAuth
       drive_auth()
       td <- drive_get("https://drive.google.com/drive/folders/15d_6NxHaXK2qzBzyI9SJcOQYJFMQA_Fn")
       
-      # Upload the zipped file to Google Drive
-      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".shp")),
-                name = paste0(shapefileName, ".shp"),
-                path = as_id(td))
-      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".shx")),
-                name = paste0(shapefileName, ".shx"),
-                path = as_id(td))
-      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".dbf")),
-                name = paste0(shapefileName, ".dbf"),
-                path = as_id(td))
-      drive_put(media = file.path(temp_shp, paste0(shapefileName, ".prj")),
-                name = paste0(shapefileName, ".prj"),
-                path = as_id(td))
-
-      # Render a text output to indicate completion
-      renderText(paste("Done! Shapefile named:", shapefileName))
-    }
+      files_to_upload <- c(".shp", ".shx", ".dbf", ".prj")
+      lapply(files_to_upload, function(ext) {
+        drive_put(media = file.path(temp_shp, paste0(shapefileName, ext)),
+                  name = paste0(shapefileName, ext),
+                  path = as_id(td))
+      })
+      
+      showNotification("Upload complete! Shapefile named: ", shapefileName, type = "message")
+    }, error = function(e) {
+      showNotification(paste("Error:", e$message), type = "error")
     })
- 
+  })
 }
 
+# Run the application
 shinyApp(ui = ui, server = server)
-
