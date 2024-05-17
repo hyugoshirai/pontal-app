@@ -71,14 +71,15 @@ server <- function(input, output, session) {
       addScaleBar() %>%
      addDrawToolbar(
       polylineOptions = FALSE,
-      polygonOptions = drawPolygonOptions(
-        showArea = FALSE, 
-        metric = TRUE,
-        shapeOptions = drawShapeOptions(clickable = TRUE), 
-        repeatMode = FALSE
-      ),
+      polygonOptions = drawPolygonOptions(showArea = TRUE, 
+                                          metric = TRUE,
+                                          shapeOptions = drawShapeOptions(clickable = TRUE), 
+                                          repeatMode = FALSE),
       circleOptions = FALSE,
-      rectangleOptions = FALSE,
+      rectangleOptions = drawRectangleOptions(showArea = TRUE, 
+                                              metric = TRUE,
+                                              shapeOptions = drawShapeOptions(clickable = TRUE), 
+                                              repeatMode = FALSE),
       markerOptions = FALSE,
       circleMarkerOptions = FALSE, 
       singleFeature = FALSE,
