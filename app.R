@@ -1,15 +1,26 @@
-# load packages
-library(shiny)
-library(leaflet)
-library(raster)
-library(leaflet.extras)
-library(shinyWidgets)
-library(sf)
-library(raster)
-library(rgdal)
-library(tidyverse)
-library(shinyjs)
-library(googledrive)
+# List of required packages
+packages <- c(
+  "googledrive",
+  "leaflet",
+  "leaflet.extras",
+  "raster",
+  "rgdal",
+  "sf",
+  "shiny",
+  "shinyWidgets",
+  "shinyjs",
+  "tidyverse"
+)
+
+# Install packages if they are not already installed
+install_packages <- packages[!packages %in% installed.packages()]
+if (length(install_packages) > 0) {
+  install.packages(install_packages)
+}
+
+# Load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
 
 # Define UI for application that draws a map
 ui <- fluidPage(
