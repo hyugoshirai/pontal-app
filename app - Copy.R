@@ -95,15 +95,28 @@ server <- function(input, output, session) {
         combined_sf <- st_transform(combined_sf, crs = 4326)
       }
       
+      # Separate points and polygons
+      points_sf <- combined_sf[st_geometry_type(combined_sf) == "POINT", ]
+      polygons_sf <- combined_sf[st_geometry_type(combined_sf) == "POLYGON", ]
+      
       # Create a temporary directory to save the shapefile components
       temp_shapefile_dir <- tempdir()
-      shapefile_name <- "drawn_features"
       
-      # Write the shapefile to the temporary directory
-      st_write(combined_sf, dsn = file.path(temp_shapefile_dir, shapefile_name), driver = "ESRI Shapefile", delete_dsn = TRUE)
+      shapefile_components <- c()
       
-      # List the shapefile components
-      shapefile_components <- list.files(temp_shapefile_dir, pattern = paste0(shapefile_name, ".*$"), full.names = TRUE)
+      # Write the points shapefile if it exists
+      if (nrow(points_sf) > 0) {
+        points_shapefile_name <- "drawn_points"
+        st_write(points_sf, dsn = file.path(temp_shapefile_dir, points_shapefile_name), driver = "ESRI Shapefile", delete_dsn = TRUE)
+        shapefile_components <- c(shapefile_components, list.files(temp_shapefile_dir, pattern = paste0(points_shapefile_name, ".*$"), full.names = TRUE))
+      }
+      
+      # Write the polygons shapefile if it exists
+      if (nrow(polygons_sf) > 0) {
+        polygons_shapefile_name <- "drawn_polygons"
+        st_write(polygons_sf, dsn = file.path(temp_shapefile_dir, polygons_shapefile_name), driver = "ESRI Shapefile", delete_dsn = TRUE)
+        shapefile_components <- c(shapefile_components, list.files(temp_shapefile_dir, pattern = paste0(polygons_shapefile_name, ".*$"), full.names = TRUE))
+      }
       
       # Create a zip file with the shapefile components
       zip::zipr(zipfile = file, files = shapefile_components)

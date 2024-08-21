@@ -60,10 +60,35 @@ updateFeatureLabels <- function() {
 
 # Handle new feature draw
 handleNewFeature <- function(input, feature) {
-  coords <- feature$geometry$coordinates[[1]] # Extract the coordinates
-  coords_matrix <- do.call(rbind, lapply(coords, unlist)) # Convert coordinates to matrix
-  
-  feature_sf <- st_sfc(st_polygon(list(coords_matrix))) # Create the sf object
+  feature_type <- feature$properties$feature_type  # Get the type of the geometry
+  print (feature)
+  print(feature_type)
+  if (feature_type == "rectangle" | feature_type == "polygon") {
+    coords <- feature$geometry$coordinates[[1]] # Extract the coordinates
+    coords_matrix <- do.call(rbind, lapply(coords, unlist)) # Convert coordinates to matrix
+    
+    feature_sf <- st_sfc(st_polygon(list(coords_matrix))) # Create the sf object
+  } else if (feature_type == "marker") {
+    coords <- unlist(feature$geometry$coordinates) # Extract and unlist the coordinates for point
+    print(coords)
+    feature_sf <- st_sfc(st_point(coords)) # Create the sf object for point
+  } else if (feature_type == "circle") {
+    center <- unlist(feature$geometry$coordinates)  # Extract and unlist the center coordinates
+    radius <- feature$properties$radius  # Extract the radius in meters
+    # Create a point geometry in WGS 84 (longitude/latitude)
+    point <- st_sfc(st_point(center), crs = 4326)
+    # Transform the point to a projected CRS that uses meters (e.g., UTM Zone 23S)
+    point_projected <- st_transform(point, crs = 32723)
+    # Apply the buffer in the projected CRS to create the circle as a polygon
+    circle_polygon_projected <- st_buffer(point_projected, dist = radius)
+    # Transform the circle polygon back to WGS 84
+    circle_polygon <- st_transform(circle_polygon_projected, crs = 4326)
+    feature_sf <- st_sfc(circle_polygon)  # Create the sf object
+    
+    # Optionally update the feature type to "POLYGON"
+    feature_type <- "POLYGON"
+    }
+
   feature_id <- feature$properties$`_leaflet_id`# Extract the feature ID
   feature_name <- paste("Feature", feature_id) # Initialize a feature name
   feature_sf <- st_sf(id = feature_id, name = feature_name, geometry = feature_sf) # Add the name as a column in the sf object
@@ -127,6 +152,7 @@ handleFeatureDeletion <- function(input, deleted_features) {
   
   showNotification(paste("Features", paste(feature_ids, collapse = ", "), "have been deleted."), duration = 5, type = "message") # Inform the user that the features have been deleted
 }
+
 # Combining All sf Objects:
 combineFeatures <- function() {
   features <- features_list()
