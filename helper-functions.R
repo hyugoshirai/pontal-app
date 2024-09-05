@@ -2,11 +2,21 @@
 
 # Initialize the Leaflet map
 initLeafletMap <- function(input) {
+  # Read the ROI shapefile
+  roi <- st_read("../LeastCostPath/BD_LeastCostTool/ROI.shp")
+  roi <- st_transform(roi, crs = 4326)
+  # Calculate the centroid of the ROI shapefile
+  roi_centroid <- st_centroid(st_union(roi))
+  # Extract the coordinates of the centroid
+  centroid_coords <- st_coordinates(roi_centroid)
+  
   leaflet() %>%
     addProviderTiles(providers$OpenStreetMap) %>%
-    setView(lng = -52.320349, lat = -22.513868, zoom = 9) %>%
+    addTiles (urlTemplate = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", group = "Satellite") %>%
+    addPolygons(data = roi, color = "blue", weight = 2, opacity = 0.8, fillOpacity = 0, group = "ROI") %>%
+    setView(lng = centroid_coords[1], lat = centroid_coords[2], zoom = 10) %>%
     addDrawToolbar(
-      polylineOptions = drawPolylineOptions(),
+      polylineOptions = TRUE,
       polygonOptions = drawPolygonOptions(showArea = TRUE, 
                                           metric = TRUE,
                                           shapeOptions = drawShapeOptions(clickable = TRUE), 
@@ -20,6 +30,10 @@ initLeafletMap <- function(input) {
       circleMarkerOptions = FALSE, 
       singleFeature = FALSE,
       editOptions = editToolbarOptions()
+    ) |> 
+    addLayersControl(
+      baseGroups = c("OpenStreetMap", "Satellite"),
+      options = layersControlOptions(collapsed = FALSE)
     )
 }
 
@@ -48,11 +62,20 @@ updateFeatureLabels <- function() {
       addLabelOnlyMarkers(
         lng = coords[1],
         lat = coords[2],
-        label = feature$name,
+        label = HTML(paste0('<div style="background-color: white; border: 2px solid black; padding: 1px; border-radius: 1px;">
+                        <span style="color: black; font-size: 14px; font-weight: bold;">', feature$name, '</span>
+                      </div>')),
+        # label = feature$name,
         labelOptions = labelOptions(
           noHide = TRUE,
           direction = "auto",
-          textOnly = TRUE
+          textOnly = TRUE,
+          # style = list(
+          #   "color" = "black",                    # Label text color
+          #   "font-size" = "16px",                 # Increase font size
+          #   "font-weight" = "bold",               # Make the font bold
+          #   "-webkit-text-stroke" = "0.2px white"   # Create a white outline
+          # )
         )
       )
   }
@@ -83,12 +106,20 @@ handleNewFeature <- function(input, feature) {
     circle_polygon_projected <- st_buffer(point_projected, dist = radius)
     # Transform the circle polygon back to WGS 84
     circle_polygon <- st_transform(circle_polygon_projected, crs = 4326)
+    circle_polygon <- st_set_crs(circle_polygon_projected, NA)
     feature_sf <- st_sfc(circle_polygon)  # Create the sf object
-    
     # Optionally update the feature type to "POLYGON"
     feature_type <- "POLYGON"
-    }
-
+  }
+  else if (feature_type == "polyline") {
+    coords <- feature$geometry$coordinates
+    print (coords)
+    coords_matrix <- do.call(rbind, lapply(coords, function(coord) unlist(coord)))
+    print (coords_matrix)
+    
+    feature_sf <- st_sfc(st_linestring(coords_matrix)) # Create the sf object for polyline
+  }
+  print(feature_sf)
   feature_id <- feature$properties$`_leaflet_id`# Extract the feature ID
   feature_name <- paste("Feature", feature_id) # Initialize a feature name
   feature_sf <- st_sf(id = feature_id, name = feature_name, geometry = feature_sf) # Add the name as a column in the sf object
@@ -105,21 +136,44 @@ handleNewFeature <- function(input, feature) {
 
 # Handle feature edit
 handleFeatureEdit <- function(input, edited_features) {
-  edited_feature_id <- edited_features$features[[1]]$properties$`_leaflet_id` # Extract the feature ID
-  edited_coords <- edited_features$features[[1]]$geometry$coordinates[[1]] # Extract the coordinates
-  edited_coords_matrix <- do.call(rbind, lapply(edited_coords, unlist)) # Convert coordinates to matrix
-  edited_feature_sf <- st_sfc(st_polygon(list(edited_coords_matrix))) # Create the sf object
+  # Extract the feature ID and coordinates
+  edited_feature_id <- edited_features$features[[1]]$properties$`_leaflet_id`
+  feature_type <- edited_features$features[[1]]$geometry$type
+  edited_coords <- edited_features$features[[1]]$geometry$coordinates
   
-  current_features <- features_list() # Retrieve the current features list
-  current_features[[as.character(edited_feature_id)]]$geometry <- edited_feature_sf # Update the feature geometry
-  features_list(current_features) # Save the updated list back to the reactive value
+  # Initialize the sf object based on the feature type
+  if (feature_type == "Point") {
+    coords <- unlist(edited_coords)  # Flatten the list if necessary
+    edited_feature_sf <- st_sfc(st_point(coords))
+    
+  } else if (feature_type == "LineString") {
+    # Convert the coordinates to a matrix
+    edited_coords_matrix <- do.call(rbind, lapply(edited_coords, unlist))
+    edited_feature_sf <- st_sfc(st_linestring(edited_coords_matrix))
+    
+  } else if (feature_type == "Polygon") {
+    edited_coords <- edited_features$features[[1]]$geometry$coordinates[[1]] # Extract the coordinates
+    edited_coords_matrix <- do.call(rbind, lapply(edited_coords, unlist)) # Convert coordinates to matrix
+    edited_feature_sf <- st_sfc(st_polygon(list(edited_coords_matrix))) # Create the sf object
+  } else {
+    showNotification("Unsupported feature type.", type = "error")
+    return()
+  }
   
-  updateFeaturesTable() # Update the data table
-  updateFeatureLabels() 
+  # Retrieve and update the current features list
+  current_features <- features_list()
+  current_features[[as.character(edited_feature_id)]]$geometry <- edited_feature_sf
+  features_list(current_features)
   
+  # Update the data table and feature labels
+  updateFeaturesTable()
+  updateFeatureLabels()
+  
+  # Notify the user about the update
   showNotification(paste("Feature", edited_feature_id, "has been updated."), duration = 5, type = "message")
 }
 
+  
 # Handle cell edit in the data table
 handleCellEdit <- function(input, new_data) {
   row <- new_data$row # Extract the row number

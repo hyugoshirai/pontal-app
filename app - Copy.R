@@ -1,5 +1,5 @@
 # Load necessary packages
-packages <- c("googledrive", "leaflet", "leaflet.extras", "raster", "sf", "shiny", "shinyWidgets", "shinyjs", "terra", "tidyverse", "viridis", "DT")
+packages <- c("googledrive", "leaflet", "leaflet.extras", "raster", "sf", "shiny", "shinyWidgets", "shinyjs", "terra", "tidyverse", "viridis", "DT", "rgdal")
 install_packages <- packages[!packages %in% installed.packages()]
 if (length(install_packages) > 0) {
   install.packages(install_packages)
@@ -10,18 +10,11 @@ source("helper-functions.R")
 # UI definition
 ui <- fluidPage(
   useShinyjs(),  # Initialize shinyjs
-  titlePanel("Mapping the Pontal"),
-  sidebarLayout(
-    sidebarPanel(
-      selectInput("basemap", "Select Basemap:", 
-                  choices = c("OpenStreetMap", "Esri.WorldImagery"),
-                  selected = "OpenStreetMap"),
-    ),
+  titlePanel("Mapping Tool"),
     mainPanel(
       leafletOutput("map"),
       DTOutput("features_table"),
       downloadButton("download_shapefile", "Download Selected Shapefile")  # Download button for shapefile
-    )
   )
 )
 
@@ -98,6 +91,8 @@ server <- function(input, output, session) {
       # Separate points and polygons
       points_sf <- combined_sf[st_geometry_type(combined_sf) == "POINT", ]
       polygons_sf <- combined_sf[st_geometry_type(combined_sf) == "POLYGON", ]
+      polylines_sf <- combined_sf[st_geometry_type(combined_sf) == "LINESTRING", ]
+      
       
       # Create a temporary directory to save the shapefile components
       temp_shapefile_dir <- tempdir()
@@ -118,12 +113,17 @@ server <- function(input, output, session) {
         shapefile_components <- c(shapefile_components, list.files(temp_shapefile_dir, pattern = paste0(polygons_shapefile_name, ".*$"), full.names = TRUE))
       }
       
+      # Write the polylines shapefile if it exists
+      if (nrow(polylines_sf) > 0) {
+        polylines_shapefile_name <- "drawn_polylines"
+        st_write(polylines_sf, dsn = file.path(temp_shapefile_dir, polylines_shapefile_name), driver = "ESRI Shapefile", delete_dsn = TRUE)
+        shapefile_components <- c(shapefile_components, list.files(temp_shapefile_dir, pattern = paste0(polylines_shapefile_name, ".*$"), full.names = TRUE))
+      }
+      
       # Create a zip file with the shapefile components
       zip::zipr(zipfile = file, files = shapefile_components)
     }
   )
-  
-  
 }
 
 # Run the application 
