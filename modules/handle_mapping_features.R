@@ -1,86 +1,3 @@
-# Helper Functions ---------------------------------------------------------
-
-# Initialize the Leaflet map
-initLeafletMap <- function(input) {
-  # Read the ROI shapefile
-  roi <- st_read("../LeastCostKraken/LeastCostPath/BD_LeastCostTool/cities.shp")
-  roi <- st_transform(roi, crs = 4326)
-  # Calculate the centroid of the ROI shapefile
-  roi_centroid <- st_centroid(st_union(roi))
-  # Extract the coordinates of the centroid
-  centroid_coords <- st_coordinates(roi_centroid)
-  
-  leaflet() %>%
-    addProviderTiles(providers$OpenStreetMap) %>%
-    addTiles (urlTemplate = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", group = "Satellite") %>%
-    addPolygons(data = roi, color = "blue", weight = 2, opacity = 0.8, fillOpacity = 0, group = "ROI") %>%
-    setView(lng = centroid_coords[1], lat = centroid_coords[2], zoom = 10) %>%
-    addDrawToolbar(
-      polylineOptions = TRUE,
-      polygonOptions = drawPolygonOptions(showArea = TRUE, 
-                                          metric = TRUE,
-                                          shapeOptions = drawShapeOptions(clickable = TRUE), 
-                                          repeatMode = FALSE),
-      circleOptions = drawCircleOptions(),
-      rectangleOptions = drawRectangleOptions(showArea = TRUE, 
-                                              metric = TRUE,
-                                              shapeOptions = drawShapeOptions(clickable = TRUE), 
-                                              repeatMode = FALSE),
-      markerOptions = drawMarkerOptions(), # Enable marker drawing
-      circleMarkerOptions = FALSE, 
-      singleFeature = FALSE,
-      editOptions = editToolbarOptions()
-    ) |> 
-    addLayersControl(
-      baseGroups = c("OpenStreetMap", "Satellite"),
-      options = layersControlOptions(collapsed = FALSE)
-    )
-}
-
-# Function to update the features table
-updateFeaturesTable <- function() {
-  features_df <- data.frame(
-    ID = names(features_list()),
-    Name = sapply(features_list(), function(x) x$name),
-    Feature = sapply(features_list(), function(x) as.character(st_geometry_type(x$geometry))),
-    stringsAsFactors = FALSE
-  )
-  features_table_data(features_df)
-}
-
-# Update feature labels on the map
-updateFeatureLabels <- function() {
-  leafletProxy("map") %>% clearMarkers()  # Clear existing labels
-  
-  current_features <- features_list()
-  
-  for (feature_id in names(current_features)) {
-    feature <- current_features[[feature_id]]
-    coords <- st_coordinates(st_centroid(feature$geometry))
-    
-    leafletProxy("map") %>%
-      addLabelOnlyMarkers(
-        lng = coords[1],
-        lat = coords[2],
-        label = HTML(paste0('<div style="background-color: white; border: 2px solid black; padding: 1px; border-radius: 1px;">
-                        <span style="color: black; font-size: 14px; font-weight: bold;">', feature$name, '</span>
-                      </div>')),
-        # label = feature$name,
-        labelOptions = labelOptions(
-          noHide = TRUE,
-          direction = "auto",
-          textOnly = TRUE,
-          # style = list(
-          #   "color" = "black",                    # Label text color
-          #   "font-size" = "16px",                 # Increase font size
-          #   "font-weight" = "bold",               # Make the font bold
-          #   "-webkit-text-stroke" = "0.2px white"   # Create a white outline
-          # )
-        )
-      )
-  }
-}
-
 # Handle new feature draw
 handleNewFeature <- function(input, feature) {
   feature_type <- feature$properties$feature_type  # Get the type of the geometry
@@ -173,7 +90,7 @@ handleFeatureEdit <- function(input, edited_features) {
   showNotification(paste("Feature", edited_feature_id, "has been updated."), duration = 5, type = "message")
 }
 
-  
+
 # Handle cell edit in the data table
 handleCellEdit <- function(input, new_data) {
   row <- new_data$row # Extract the row number
@@ -187,7 +104,7 @@ handleCellEdit <- function(input, new_data) {
   
   updateFeaturesTable()  # Update the data table
   updateFeatureLabels()  # Update feature labels
-
+  
   # Inform the user that the feature name has been updated
   showNotification(paste("Feature name has been updated to:", new_value), duration = 5, type = "message")
 }
@@ -205,11 +122,4 @@ handleFeatureDeletion <- function(input, deleted_features) {
   updateFeatureLabels() # Update feature labels
   
   showNotification(paste("Features", paste(feature_ids, collapse = ", "), "have been deleted."), duration = 5, type = "message") # Inform the user that the features have been deleted
-}
-
-# Combining All sf Objects:
-combineFeatures <- function() {
-  features <- features_list()
-  combined_sf <- do.call(rbind, features)
-  return(combined_sf)
 }
